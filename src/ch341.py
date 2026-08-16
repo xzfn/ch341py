@@ -82,3 +82,77 @@ Args:
 Returns:
     True for success.
 """
+
+
+CH341StreamI2C = ch341dll.CH341StreamI2C
+# index, write_length, write_buffer, read_length, read_buffer
+CH341StreamI2C.argtypes = [wintypes.ULONG, wintypes.ULONG, ctypes.c_void_p, wintypes.ULONG, ctypes.c_void_p]
+CH341StreamI2C.restype = wintypes.BOOL
+CH341StreamI2C.errcheck = win32_check_bool
+CH341StreamI2C.__doc__ = """
+Stream I2C data
+Args:
+    iIndex: device index.
+    iWriteLength: write length.
+    iWriteBuffer: buffer to write to device.
+    iReadLength: read length.
+    oReadBuffer: buffer to store read data from device.
+Returns:
+    True for success.
+"""
+
+
+mCH341_PACKET_LENGTH = 32
+
+mCH341A_CMD_I2C_STREAM = 0xAA
+
+mCH341A_CMD_I2C_STM_STA = 0x74
+mCH341A_CMD_I2C_STM_STO = 0x75
+mCH341A_CMD_I2C_STM_OUT	= 0x80
+mCH341A_CMD_I2C_STM_END = 0x00
+
+mCH341A_CMD_I2C_STM_MAX = min(0x3F, mCH341_PACKET_LENGTH)
+
+
+CH341WriteRead = ch341dll.CH341WriteRead
+CH341WriteRead.argtypes = [wintypes.ULONG, wintypes.ULONG, ctypes.c_void_p, wintypes.ULONG, wintypes.ULONG, wintypes.PULONG, ctypes.c_void_p]
+CH341WriteRead.restype = wintypes.BOOL
+CH341WriteRead.errcheck = win32_check_bool
+CH341WriteRead.__doc__ = """
+Stream write and read data
+Args:
+    iIndex: device index.
+    iWriteLength: write length.
+    iWriteBuffer: buffer to write to device.
+    iReadStep: read block size (total to read length is iReadStep * iReadTimes).
+    iReadTimes: read times.
+    oReadLength: output read length.
+    oReadBuffer: buffer to store read data from device.
+Returns:
+    True for success.
+"""
+
+
+
+def i2c_write(device_index, data):
+    return CH341StreamI2C(device_index, len(data), data, 0, None)
+
+
+def i2c_check_addr_ack(device_index, addr_8bit):
+    data = bytearray(mCH341_PACKET_LENGTH)
+    data[0] = mCH341A_CMD_I2C_STREAM
+    data[1] = mCH341A_CMD_I2C_STM_STA
+    data[2] = mCH341A_CMD_I2C_STM_OUT
+    data[3] = addr_8bit
+    data[4] = mCH341A_CMD_I2C_STM_STO
+    data[5] = mCH341A_CMD_I2C_STM_END
+    length = 6
+    in_length = wintypes.ULONG(0)
+
+    c_buffer = create_ctypes_buffer(bytes(data))
+    c_buffer_read = ctypes.create_string_buffer(mCH341_PACKET_LENGTH)
+    CH341WriteRead(device_index, length, c_buffer, mCH341A_CMD_I2C_STM_MAX, 1, ctypes.byref(in_length), c_buffer_read)
+    if in_length.value > 0:
+        if c_buffer_read.raw[in_length.value - 1] & 0x80 == 0:
+            return True
+    return False
